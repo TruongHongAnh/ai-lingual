@@ -19,6 +19,9 @@ namespace BackEnd.Data
         public DbSet<LessonQna> LessonQnas { get; set; }
         public DbSet<Leaderboard> Leaderboards { get; set; }
 
+        public DbSet<Vocabulary> Vocabularies { get; set; }
+        public DbSet<LessonVocabulary> LessonVocabularies { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

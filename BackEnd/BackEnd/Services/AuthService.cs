@@ -25,8 +25,33 @@ namespace BackEnd.Services
 
         public async Task<AuthResponse?> AuthenticateAsync(LoginRequest request)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email && !u.IsBanned);
-            if (user == null || user.PasswordHash != request.Password) return null;
+            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+                return null;
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+
+            if (user == null || user.IsBanned)
+                return null;
+
+            // Hybrid auth: So sánh plain text HOẶC BCrypt hash
+            bool isValidPassword = false;
+            if (user.PasswordHash == request.Password)
+            {
+                isValidPassword = true;
+            }
+            else if (user.PasswordHash.StartsWith("$2a$") || user.PasswordHash.StartsWith("$2b$"))
+            {
+                // Kiểm tra BCrypt hash (cho tài khoản đã có hash cũ)
+                try { isValidPassword = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash); } catch { isValidPassword = false; }
+            }
+            else if (user.PasswordHash == "hash_123" && request.Password == "hash_123")
+            {
+                // Placeholder cho test accounts
+                isValidPassword = true;
+            }
+
+            if (!isValidPassword)
+                return null;
 
             user.LastLogin = DateTime.UtcNow;
             await _context.SaveChangesAsync();
@@ -34,6 +59,7 @@ namespace BackEnd.Services
             return new AuthResponse
             {
                 Token = GenerateToken(user),
+                UserId = user.Id.ToString(),
                 FullName = user.FullName,
                 Role = user.Role,
                 IsPremium = user.IsPremium
@@ -42,13 +68,19 @@ namespace BackEnd.Services
 
         public async Task<bool> RegisterAsync(RegisterRequest request)
         {
-            if (await _context.Users.AnyAsync(u => u.Email == request.Email)) return false;
+            if (string.IsNullOrWhiteSpace(request.Email) ||
+                string.IsNullOrWhiteSpace(request.Password) ||
+                string.IsNullOrWhiteSpace(request.FullName))
+                return false;
+
+            if (await _context.Users.AnyAsync(u => u.Email == request.Email.ToLower()))
+                return false;
 
             var user = new User
             {
-                Email = request.Email,
-                PasswordHash = request.Password, // Thực tế cần BCrypt băm mật khẩu
-                FullName = request.FullName,
+                Email = request.Email.ToLower().Trim(),
+                PasswordHash = request.Password, // Lưu plain text (ĐÃ BỎ BCrypt)
+                FullName = request.FullName.Trim(),
                 Role = "User"
             };
 
