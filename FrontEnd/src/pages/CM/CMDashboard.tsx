@@ -1,105 +1,92 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import apiClient from '../../services/apiClient';
-import { getUserId } from '../../utils/auth';
-
-interface Course { id: string; title: string; targetLanguage: string; }
-interface Qna { id: string; lessonTitle: string; studentName: string; question: string; answer: string | null; status: string; }
 
 export default function CMDashboard() {
-    const [activeTab, setActiveTab] = useState<'curriculum' | 'qna'>('curriculum');
-    const managerId = getUserId();
+    const navigate = useNavigate();
+    const [stats, setStats] = useState({ totalCourses: 0, pendingQna: 0, recentVocabs: 0 });
+    const [managedLang, setManagedLang] = useState('Đang tải...');
+    const [loading, setLoading] = useState(true);
 
-    const [courses, setCourses] = useState<Course[]>([]);
-    const [qnaList, setQnaList] = useState<Qna[]>([]);
-
-    // Form states
-    const [courseForm, setCourseForm] = useState({ title: '', lang: 'en' });
-    const [replyText, setReplyText] = useState<{ [key: string]: string }>({});
+    const getLangLabel = (code: string) => {
+        if (code === 'en') return 'Tiếng Anh 🇬🇧';
+        if (code === 'ja') return 'Tiếng Nhật 🇯🇵';
+        if (code === 'zh') return 'Tiếng Trung 🇨🇳';
+        if (code === 'all') return 'Toàn quyền (Global) 🌐';
+        return 'Không xác định';
+    };
 
     useEffect(() => {
-        loadCourses();
-        loadQna();
+        const fetchDashboardData = async () => {
+            try {
+                // 👉 GỌI API LẤY NGÔN NGỮ QUẢN LÝ
+                const profileRes = await apiClient.get('/user/student/profile');
+                if (profileRes.data) {
+                    setManagedLang(getLangLabel(profileRes.data.managedLanguage));
+                }
+
+                const qnaRes = await apiClient.get<any[]>('/cm/qna/pending');
+                setStats({ totalCourses: 6, pendingQna: qnaRes.data.length, recentVocabs: 124 });
+            } catch (error) { console.error("Lỗi lấy data Dashboard"); } 
+            finally { setLoading(false); }
+        };
+        fetchDashboardData();
     }, []);
 
-    const loadCourses = async () => {
-        const res = await apiClient.get<Course[]>('/cm/courses/all');
-        setCourses(res.data);
-    };
-
-    const loadQna = async () => {
-        const res = await apiClient.get<Qna[]>('/cm/qna/pending');
-        setQnaList(res.data);
-    };
-
-    const handleCreateCourse = async (e: React.FormEvent) => {
-        e.preventDefault();
-        await apiClient.post('/cm/courses/create', { title: courseForm.title, targetLanguage: courseForm.lang });
-        setCourseForm({ title: '', lang: 'en' });
-        loadCourses();
-    };
-
-    const handleSendAnswer = async (qnaId: string) => {
-        const answer = replyText[qnaId];
-        if (!answer?.trim()) return;
-
-        await apiClient.put('/cm/cm/reply-student-qna', { qnaId, managerId, answerText: answer });
-        alert('Đã gửi lời giải thích học thuật thành công!');
-        loadQna();
-    };
+    if (loading) return <div style={{ textAlign: 'center', marginTop: '100px', color: '#64748b' }}>⏳ Đang tải bảng điều khiển...</div>;
 
     return (
-        <div style={{ background: '#fff', padding: '30px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-            <div style={{ display: 'flex', gap: '10px', borderBottom: '2px solid #e2e8f0', paddingBottom: '15px', marginBottom: '25px' }}>
-                <button onClick={() => setActiveTab('curriculum')} style={{ padding: '10px 20px', border: 'none', background: activeTab === 'curriculum' ? '#059669' : '#e2e8f0', color: activeTab === 'curriculum' ? '#fff' : '#475569', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>📚 Quản lý Giáo trình</button>
-                <button onClick={() => setActiveTab('qna')} style={{ padding: '10px 20px', border: 'none', background: activeTab === 'qna' ? '#059669' : '#e2e8f0', color: activeTab === 'qna' ? '#fff' : '#475569', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>💬 Trả lời câu hỏi học viên ({qnaList.length})</button>
+        <div style={{ maxWidth: '1200px', margin: '40px auto', padding: '0 20px', fontFamily: 'Inter, sans-serif' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+                <div>
+                    <h1 style={{ margin: '0 0 8px 0', color: '#0f172a', fontSize: '28px', fontWeight: '900' }}>👋 Chào mừng trở lại, Biên tập viên!</h1>
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '16px' }}>Đây là tổng quan tình hình nội dung của hệ thống hôm nay.</p>
+                </div>
+                <div style={{ backgroundColor: '#f1f5f9', padding: '8px 16px', borderRadius: '12px', fontWeight: 'bold', color: '#475569', fontSize: '14px' }}>
+                    Phân quyền: <span style={{ color: '#10b981' }}>{managedLang}</span>
+                </div>
             </div>
 
-            {/* TAB 1: BIÊN TẬP KHÓA HỌC/BÀI HỌC */}
-            {activeTab === 'curriculum' && (
-                <div>
-                    <h3>📚 Bản đồ xây dựng khóa học ngôn ngữ</h3>
-                    <form onSubmit={handleCreateCourse} style={{ display: 'flex', gap: '10px', marginBottom: '30px', background: '#f8fafc', padding: '15px', borderRadius: '8px' }}>
-                        <input type="text" placeholder="Tên khóa học mới (VD: Tiếng Anh du lịch...)" value={courseForm.title} onChange={e => setCourseForm({ ...courseForm, title: e.target.value })} required style={{ flex: 1, padding: '8px' }} />
-                        <select value={courseForm.lang} onChange={e => setCourseForm({ ...courseForm, lang: e.target.value })} style={{ padding: '8px' }}>
-                            <option value="en">Tiếng Anh (EN)</option>
-                            <option value="ja">Tiếng Nhật (JA)</option>
-                        </select>
-                        <button type="submit" style={{ background: '#059669', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Tạo khóa học</button>
-                    </form>
-
-                    <h4>Danh sách khóa học hiện hành trong Hệ thống</h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                        {courses.map(c => (
-                            <div key={c.id} style={{ padding: '15px', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#f8fafc' }}>
-                                <h4 style={{ margin: '0 0 5px 0' }}>📘 {c.title}</h4>
-                                <span style={{ fontSize: '12px', background: '#cbd5e1', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>Mã NN: {c.targetLanguage}</span>
-                            </div>
-                        ))}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px', marginBottom: '40px' }}>
+                <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '20px' }}>
+                    <div style={{ width: '60px', height: '60px', borderRadius: '16px', backgroundColor: '#eff6ff', color: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '28px' }}>📚</div>
+                    <div>
+                        <div style={{ color: '#64748b', fontSize: '14px', fontWeight: 'bold', marginBottom: '4px' }}>Tổng số Chương (Units)</div>
+                        <div style={{ color: '#0f172a', fontSize: '28px', fontWeight: '900' }}>{stats.totalCourses}</div>
                     </div>
                 </div>
-            )}
-
-            {/* TAB 2: GIẢI ĐÁP THẮC MẮC HỌC THUẬT */}
-            {activeTab === 'qna' && (
-                <div>
-                    <h3>💬 Thắc mắc về lỗi nội dung và bài giảng từ Học viên</h3>
-                    {qnaList.length === 0 ? <p style={{ color: '#64748b' }}>Hệ thống sạch sẽ, không có câu hỏi nào đang tồn đọng.</p> : (
-                        qnaList.map(q => (
-                            <div key={q.id} style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '15px', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                                <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '5px' }}>
-                                    🎯 Bài học: <b>{q.lessonTitle}</b> | Học viên: <b style={{ color: '#0284c7' }}>{q.studentName}</b>
-                                </div>
-                                <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 15px 0', color: '#1e293b' }}>❓ Câu hỏi: {q.question}</p>
-                                
-                                <div style={{ display: 'flex', gap: '10px' }}>
-                                    <input type="text" placeholder="Nhập lời giải thích chuyên môn hoặc sửa lỗi dịch..." value={replyText[q.id] || ''} onChange={e => setReplyText({ ...replyText, [q.id]: e.target.value })} style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
-                                    <button onClick={() => handleSendAnswer(q.id)} style={{ background: '#059669', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Gửi đáp án</button>
-                                </div>
-                            </div>
-                        ))
-                    )}
+                <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '20px' }}>
+                    <div style={{ width: '60px', height: '60px', borderRadius: '16px', backgroundColor: '#fef2f2', color: '#ef4444', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '28px' }}>💬</div>
+                    <div>
+                        <div style={{ color: '#64748b', fontSize: '14px', fontWeight: 'bold', marginBottom: '4px' }}>Q&A Đang chờ</div>
+                        <div style={{ color: '#ef4444', fontSize: '28px', fontWeight: '900' }}>{stats.pendingQna}</div>
+                    </div>
                 </div>
-            )}
+                <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '20px' }}>
+                    <div style={{ width: '60px', height: '60px', borderRadius: '16px', backgroundColor: '#ecfdf5', color: '#10b981', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '28px' }}>📝</div>
+                    <div>
+                        <div style={{ color: '#64748b', fontSize: '14px', fontWeight: 'bold', marginBottom: '4px' }}>Từ vựng đã thêm tuần này</div>
+                        <div style={{ color: '#0f172a', fontSize: '28px', fontWeight: '900' }}>{stats.recentVocabs}</div>
+                    </div>
+                </div>
+            </div>
+
+            <h2 style={{ fontSize: '20px', color: '#0f172a', fontWeight: '800', marginBottom: '20px' }}>⚡ Lối tắt nhanh</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '25px' }}>
+                <div onClick={() => navigate('/cm/curriculum')} style={{ backgroundColor: '#7c3aed', color: '#fff', borderRadius: '20px', padding: '30px', cursor: 'pointer', transition: 'filter 0.2s' }} onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.1)'} onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1)'}>
+                    <div style={{ fontSize: '40px', marginBottom: '15px' }}>🏗️</div>
+                    <h3 style={{ margin: '0 0 10px 0', fontSize: '22px', fontWeight: '900' }}>Xây dựng Giáo trình</h3>
+                    <p style={{ margin: 0, opacity: 0.9, fontSize: '15px', lineHeight: '1.5' }}>Quản lý nội dung cho phân vùng: <b>{managedLang}</b>.</p>
+                </div>
+                <div onClick={() => navigate('/cm/qna')} style={{ backgroundColor: '#fff', border: '2px solid #e2e8f0', borderRadius: '20px', padding: '30px', cursor: 'pointer', transition: 'border-color 0.2s, background-color 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#f59e0b'; e.currentTarget.style.backgroundColor = '#fffbeb'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.backgroundColor = '#fff'; }}>
+                    <div style={{ fontSize: '40px', marginBottom: '15px' }}>💌</div>
+                    <h3 style={{ margin: '0 0 10px 0', fontSize: '22px', fontWeight: '900', color: '#0f172a' }}>Giải đáp Học viên</h3>
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '15px', lineHeight: '1.5' }}>Kiểm tra hòm thư và giải thích các thắc mắc về Ngữ pháp/Từ vựng cho học viên.</p>
+                    {stats.pendingQna > 0 && <div style={{ display: 'inline-block', marginTop: '15px', padding: '6px 12px', backgroundColor: '#ef4444', color: '#fff', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>Có {stats.pendingQna} câu hỏi chưa trả lời</div>}
+                </div>
+            </div>
+
         </div>
     );
 }

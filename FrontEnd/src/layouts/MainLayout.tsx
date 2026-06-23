@@ -1,57 +1,68 @@
-import { Outlet, Link, useNavigate } from 'react-router-dom';
-import { getUserName, getUserRole, logout } from '../utils/auth';
+import { Outlet } from 'react-router-dom';
+import Header from '../components/UserHeader';
+import { getUserRole } from '../utils/auth';
 
 export default function MainLayout() {
-    const userName = getUserName() || 'Người dùng';
-    const role = getUserRole();
-    const navigate = useNavigate();
-
-    const handleLogout = () => {
-        logout();
-        navigate('/');
-    };
-
+    // Lấy role từ local storage (mặc định là User nếu chưa đăng nhập)
+    const role = getUserRole() || 'User';
+    
     return (
-        <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
-            {/* THANH ĐIỀU HƯỚNG */}
-            <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 40px', background: '#0f172a', color: 'white', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                <div style={{ fontWeight: '900', fontSize: '24px', letterSpacing: '1px', color: '#38bdf8' }}>
-                    🚀 AI LINGO
-                </div>
-                
-                <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
-                    {/* MENU CHO HỌC VIÊN */}
-                    {role === 'User' && (
-                        <>
-                            <Link to="/student/dashboard" style={{ color: '#cbd5e1', textDecoration: 'none', fontWeight: '500' }}>🏠 Bảng điểm</Link>
-                            <Link to="/student/ai-practice" style={{ color: '#cbd5e1', textDecoration: 'none', fontWeight: '500' }}>🤖 Trợ lý AI</Link>
-                        </>
-                    )}
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: role === 'User' ? '#fff' : '#f8fafc' }}>
+            
+            {/* Thanh điều hướng dùng chung, truyền role vào để tự biến hình */}
+            <Header role={role} />
 
-                    {/* MENU CHO CONTENT MANAGER */}
-                    {role === 'ContentManager' && (
-                        <Link to="/cm/dashboard" style={{ color: '#cbd5e1', textDecoration: 'none', fontWeight: '500' }}>✍️ Quản lý Nội dung</Link>
-                    )}
-
-                    {/* MENU CHO ADMIN */}
-                    {role === 'Admin' && (
-                        <Link to="/admin/dashboard" style={{ color: '#cbd5e1', textDecoration: 'none', fontWeight: '500' }}>👑 Quản trị Hệ thống</Link>
-                    )}
-                    
-                    <div style={{ height: '24px', width: '1px', backgroundColor: '#475569' }}></div>
-                    
-                    <span style={{ color: '#e2e8f0' }}>Chào, <strong style={{ color: '#fbbf24' }}>{userName}</strong> ({role})</span>
-                    
-                    <button onClick={handleLogout} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-                        Đăng Xuất
-                    </button>
-                </div>
-            </nav>
-
-            {/* NỘI DUNG MÀN HÌNH CHÍNH */}
-            <main style={{ padding: '40px', maxWidth: '1200px', margin: '0 auto', width: '100%', flex: 1 }}>
-                <Outlet /> 
+            {/* Vùng nội dung chính (Outlet). Admin/CM nền xám nhạt cho ra dáng Dashboard, User nền trắng */}
+            <main style={{ flex: 1, padding: role === 'User' ? '50px 20px' : '30px 40px', display: 'flex', flexDirection: 'column' }}>
+                <Outlet />
             </main>
+
+            {/* FOOTER: Chỉ hiển thị cho Học viên. Admin/CM cần giao diện rộng rãi nên sẽ ẩn đi */}
+            {role === 'User' && (
+                <footer style={{ backgroundColor: '#faf9f5', borderTop: '1px solid #e2e8f0', padding: '50px 40px', marginTop: 'auto' }}>
+                    <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '30px' }}>
+                        <div>
+                            <h4 style={{ color: '#0f172a', fontSize: '16px', marginBottom: '20px' }}>Công cụ AI</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <span style={{ color: '#64748b', fontSize: '14px', cursor: 'pointer' }}>Sửa lỗi Ngữ pháp</span>
+                                <span style={{ color: '#64748b', fontSize: '14px', cursor: 'pointer' }}>Hội thoại Role-play</span>
+                                <span style={{ color: '#64748b', fontSize: '14px', cursor: 'pointer' }}>Nghe chép chính tả</span>
+                                <span style={{ color: '#64748b', fontSize: '14px', cursor: 'pointer' }}>Dịch thuật tự nhiên</span>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style={{ color: '#0f172a', fontSize: '16px', marginBottom: '20px' }}>Ngôn ngữ</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <span style={{ color: '#64748b', fontSize: '14px', cursor: 'pointer' }}>🇺🇸 Tiếng Anh (IELTS/TOEIC)</span>
+                                <span style={{ color: '#64748b', fontSize: '14px', cursor: 'pointer' }}>🇯🇵 Tiếng Nhật (JLPT)</span>
+                                <span style={{ color: '#64748b', fontSize: '14px', cursor: 'pointer' }}>🇨🇳 Tiếng Trung (HSK)</span>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style={{ color: '#0f172a', fontSize: '16px', marginBottom: '20px' }}>Cộng đồng</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <span style={{ color: '#64748b', fontSize: '14px', cursor: 'pointer' }}>Gửi góp ý</span>
+                                <span style={{ color: '#64748b', fontSize: '14px', cursor: 'pointer' }}>Facebook</span>
+                                <span style={{ color: '#64748b', fontSize: '14px', cursor: 'pointer' }}>YouTube</span>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style={{ color: '#0f172a', fontSize: '16px', marginBottom: '20px' }}>Pháp lý</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <span style={{ color: '#64748b', fontSize: '14px', cursor: 'pointer' }}>Điều khoản sử dụng</span>
+                                <span style={{ color: '#64748b', fontSize: '14px', cursor: 'pointer' }}>Chính sách bảo mật</span>
+                            </div>
+                        </div>
+                    </div>
+                </footer>
+            )}
+
+            {/* NÚT GÓP Ý: Cũng chỉ nên hiện cho Học viên */}
+            {role === 'User' && (
+                <button style={{ position: 'fixed', bottom: '30px', right: '30px', backgroundColor: '#1e293b', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: '30px', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 999 }}>
+                    💬 Góp ý
+                </button>
+            )}
         </div>
     );
 }

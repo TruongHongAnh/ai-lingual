@@ -1,131 +1,131 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import apiClient from '../../services/apiClient';
-import { getUserId } from '../../utils/auth';
 
-interface User { id: string; email: string; fullName: string; role: string; isBanned: boolean; banReason: string | null; }
-interface Ticket { id: string; senderName: string; issueCategory: string; content: string; status: string; }
-interface Transaction { id: string; userEmail: string; gatewayTransactionId: string; amount: number; status: string; createdAt: string; }
+interface User {
+    id: string;
+    fullName: string;
+    email: string;
+    role: string;
+    totalXP: number;
+    isBanned: boolean;
+    banReason: string | null;
+}
 
 export default function AdminDashboard() {
-    const [activeTab, setActiveTab] = useState<'users' | 'tickets' | 'revenue'>('users');
-    const adminId = getUserId();
-
     const [users, setUsers] = useState<User[]>([]);
-    const [tickets, setTickets] = useState<Ticket[]>([]);
-    const [txns, setTxns] = useState<Transaction[]>([]);
-    const [adminReplies, setAdminReplies] = useState<{ [key: string]: string }>({});
+    const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState({ total: 0, active: 0, banned: 0 });
+
+    const loadUsers = async () => {
+        try {
+            // 👉 LẤY DỮ LIỆU THẬT TỪ DATABASE
+            const res = await apiClient.get<User[]>('/admin/admin/users');
+            setUsers(res.data);
+            setStats({
+                total: res.data.length,
+                active: res.data.filter(u => !u.isBanned).length,
+                banned: res.data.filter(u => u.isBanned).length
+            });
+        } catch (error) {
+            console.error("Lỗi lấy danh sách user:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
         loadUsers();
-        loadTickets();
-        loadTransactions();
     }, []);
 
-    const loadUsers = async () => {
-        const res = await apiClient.get<User[]>('/admin/admin/users');
-        setUsers(res.data);
+    // 👉 HÀM KHÓA / MỞ KHÓA KẾT NỐI API THẬT
+    const toggleBanStatus = async (userId: string, currentStatus: boolean) => {
+        const isBanning = !currentStatus;
+        const reason = isBanning ? window.prompt("Nhập lý do khóa tài khoản này:") : "";
+        
+        if (isBanning && !reason) return; // Hủy khóa nếu không nhập lý do
+
+        if (window.confirm(`Bạn có chắc chắn muốn ${isBanning ? 'Khóa' : 'Mở khóa'} tài khoản này?`)) {
+            try {
+                if (isBanning) {
+                    await apiClient.put('/admin/admin/ban-violator', { userId, reason });
+                } else {
+                    await apiClient.put('/admin/admin/unban-user', { userId });
+                }
+                window.alert(`✅ Đã ${isBanning ? 'khóa' : 'mở khóa'} tài khoản thành công!`);
+                loadUsers(); // Tải lại danh sách từ Database
+            } catch (error: any) {
+                window.alert(error.response?.data?.message || "Lỗi xử lý!");
+            }
+        }
     };
 
-    const loadTickets = async () => {
-        const res = await apiClient.get<Ticket[]>('/admin/tickets/all-pending');
-        setTickets(res.data);
+    const getRoleBadge = (role: string) => {
+        if (role === 'Admin') return <span style={{ background: '#fee2e2', color: '#991b1b', padding: '4px 10px', borderRadius: '6px', fontWeight: 'bold', fontSize: '12px' }}>Admin</span>;
+        if (role === 'ContentManager') return <span style={{ background: '#f3e8ff', color: '#6d28d9', padding: '4px 10px', borderRadius: '6px', fontWeight: 'bold', fontSize: '12px' }}>ContentManager</span>;
+        return <span style={{ background: '#f1f5f9', color: '#475569', padding: '4px 10px', borderRadius: '6px', fontWeight: 'bold', fontSize: '12px' }}>User</span>;
     };
 
-    const loadTransactions = async () => {
-        const res = await apiClient.get<Transaction[]>('/admin/transactions/history');
-        setTxns(res.data);
-    };
-
-    const handleBanUser = async (userId: string) => {
-        const reason = prompt('Nhập lý do khóa tài khoản vi phạm quy định:');
-        if (!reason) return;
-        await apiClient.put('/admin/admin/ban-violator', { userId, reason });
-        alert('Đã khóa tài khoản vĩnh viễn thành công!');
-        loadUsers();
-    };
-
-    const handleResolveTicket = async (ticketId: string) => {
-        const reply = adminReplies[ticketId];
-        if (!reply?.trim()) return;
-
-        await apiClient.put('/admin/admin/resolve-support-ticket', { ticketId, adminId, reply });
-        alert('Đã đóng khiếu nại và phản hồi tới Email khách hàng!');
-        loadTickets();
-    };
-
-    // Tính tổng tiền nạp VIP thành công thực tế (Success) từ Database
-    const totalRevenue = txns.filter(t => t.status === 'Success').reduce((sum, t) => sum + t.amount, 0);
+    if (loading) return <div style={{ textAlign: 'center', marginTop: '100px', fontWeight: 'bold', color: '#64748b' }}>⏳ Đang tải dữ liệu từ Database...</div>;
 
     return (
-        <div style={{ background: '#fff', padding: '30px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-            <div style={{ display: 'flex', gap: '10px', borderBottom: '2px solid #e2e8f0', paddingBottom: '15px', marginBottom: '25px' }}>
-                <button onClick={() => setActiveTab('users')} style={{ padding: '10px 20px', border: 'none', background: activeTab === 'users' ? '#dc2626' : '#e2e8f0', color: activeTab === 'users' ? '#fff' : '#475569', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>👥 Quản lý Thành viên</button>
-                <button onClick={() => setActiveTab('tickets')} style={{ padding: '10px 20px', border: 'none', background: activeTab === 'tickets' ? '#dc2626' : '#e2e8f0', color: activeTab === 'tickets' ? '#fff' : '#475569', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>🎫 Giải quyết Khiếu nại ({tickets.length})</button>
-                <button onClick={() => setActiveTab('revenue')} style={{ padding: '10px 20px', border: 'none', background: activeTab === 'revenue' ? '#dc2626' : '#e2e8f0', color: activeTab === 'revenue' ? '#fff' : '#475569', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>💰 Đối soát Doanh thu</button>
+        <div style={{ maxWidth: '1400px', margin: '40px auto', padding: '0 20px', fontFamily: 'Inter, sans-serif' }}>
+            <h1 style={{ color: '#0f172a', marginBottom: '30px', fontSize: '28px', fontWeight: '900' }}>👥 Quản lý Người dùng</h1>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px', marginBottom: '30px' }}>
+                <div style={{ background: '#dcfce3', border: '1px solid #86efac', padding: '25px', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ fontSize: '40px', fontWeight: '900', color: '#166534' }}>{stats.active}</div>
+                    <div style={{ color: '#166534', fontWeight: 'bold', fontSize: '16px' }}>👥 Đang hoạt động</div>
+                </div>
+                <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', padding: '25px', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ fontSize: '40px', fontWeight: '900', color: '#991b1b' }}>{stats.banned}</div>
+                    <div style={{ color: '#991b1b', fontWeight: 'bold', fontSize: '16px' }}>🚫 Bị khóa</div>
+                </div>
             </div>
 
-            {/* TAB 1: QUẢN LÝ USER */}
-            {activeTab === 'users' && (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead><tr style={{ background: '#f1f5f9', textAlign: 'left' }}><th style={{ padding: '10px' }}>Họ tên</th><th style={{ padding: '10px' }}>Email</th><th style={{ padding: '10px' }}>Chức vụ</th><th style={{ padding: '10px' }}>Trạng thái</th><th style={{ padding: '10px' }}>Hành động</th></tr></thead>
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                        <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                            <th style={{ padding: '16px 20px', color: '#475569', fontWeight: '800', fontSize: '14px' }}>Họ tên</th>
+                            <th style={{ padding: '16px 20px', color: '#475569', fontWeight: '800', fontSize: '14px' }}>Email</th>
+                            <th style={{ padding: '16px 20px', color: '#475569', fontWeight: '800', fontSize: '14px' }}>Role</th>
+                            <th style={{ padding: '16px 20px', color: '#475569', fontWeight: '800', fontSize: '14px' }}>XP</th>
+                            <th style={{ padding: '16px 20px', color: '#475569', fontWeight: '800', fontSize: '14px' }}>Trạng thái</th>
+                            <th style={{ padding: '16px 20px', color: '#475569', fontWeight: '800', fontSize: '14px', textAlign: 'center' }}>Hành động</th>
+                        </tr>
+                    </thead>
                     <tbody>
-                        {users.map(u => (
-                            <tr key={u.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                                <td style={{ padding: '10px', fontWeight: 'bold' }}>{u.fullName}</td>
-                                <td style={{ padding: '10px' }}>{u.email}</td>
-                                <td style={{ padding: '10px' }}>{u.role}</td>
-                                <td style={{ padding: '10px' }}>{u.isBanned ? <span style={{ color: 'red', fontWeight: 'bold' }}>🛑 Bị khóa ({u.banReason})</span> : <span style={{ color: 'green' }}>✅ Hoạt động</span>}</td>
-                                <td style={{ padding: '10px' }}><button onClick={() => handleBanUser(u.id)} disabled={u.isBanned || u.role === 'Admin'} style={{ background: u.isBanned ? '#cbd5e1' : '#dc2626', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Khóa tài khoản</button></td>
+                        {users.map((u, index) => (
+                            <tr key={u.id} style={{ borderBottom: '1px solid #f1f5f9', background: index % 2 === 0 ? '#fff' : '#fafafa' }}>
+                                <td style={{ padding: '16px 20px', fontWeight: 'bold', color: '#0f172a' }}>{u.fullName}</td>
+                                <td style={{ padding: '16px 20px', color: '#475569' }}>{u.email}</td>
+                                <td style={{ padding: '16px 20px' }}>{getRoleBadge(u.role)}</td>
+                                <td style={{ padding: '16px 20px', fontWeight: 'bold', color: '#f59e0b' }}>{u.totalXP.toLocaleString()}</td>
+                                <td style={{ padding: '16px 20px' }}>
+                                    {!u.isBanned ? (
+                                        <div style={{ color: '#10b981', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}>✅ Hoạt động</div>
+                                    ) : (
+                                        <div>
+                                            <div style={{ color: '#ef4444', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}>🚫 Khóa</div>
+                                            <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>Lý do: {u.banReason}</div>
+                                        </div>
+                                    )}
+                                </td>
+                                <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                                    {u.role !== 'Admin' && (
+                                        <button 
+                                            onClick={() => toggleBanStatus(u.id, u.isBanned)}
+                                            style={{ background: u.isBanned ? '#10b981' : '#ef4444', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', width: '90px' }}
+                                        >
+                                            {u.isBanned ? 'Mở Khóa' : 'Khóa'}
+                                        </button>
+                                    )}
+                                </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
-            )}
-
-            {/* TAB 2: XỬ LÝ KHIẾU NẠI MẤT ACC / LỖI NẠP TIỀN */}
-            {activeTab === 'tickets' && (
-                <div>
-                    <h3>🎫 Danh sách phiếu khiếu nại đang chờ Admin duyệt</h3>
-                    {tickets.map(t => (
-                        <div key={t.id} style={{ padding: '15px', border: '1px solid #e2e8f0', borderRadius: '6px', marginBottom: '15px', background: '#fef2f2' }}>
-                            <p style={{ margin: '0 0 5px 0' }}>👤 Khách hàng: <b>{t.senderName}</b> | Phân loại sự cố: <b style={{ color: '#dc2626' }}>{t.issueCategory}</b></p>
-                            <p style={{ margin: '0 0 15px 0', background: '#fff', padding: '10px', borderRadius: '4px', border: '1px solid #fee2e2' }}>🚨 <b>Nội dung kiện nghị:</b> {t.content}</p>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <input type="text" placeholder="Nhập phương án xử lý (VD: Đã kích hoạt VIP bù, đã cấp lại mật khẩu...)" value={adminReplies[t.id] || ''} onChange={e => setAdminReplies({ ...adminReplies, [t.id]: e.target.value })} style={{ flex: 1, padding: '8px' }} />
-                                <button onClick={() => handleResolveTicket(t.id)} style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '8px 20px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '4px' }}>Đóng phiếu hỗ trợ</button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {/* TAB 3: ĐỐI SOÁT TÀI CHÍNH (TRANSACTIONS) */}
-            {activeTab === 'revenue' && (
-                <div>
-                    <div style={{ background: '#0f172a', color: '#fff', padding: '20px', borderRadius: '8px', marginBottom: '25px' }}>
-                        <h4 style={{ margin: 0, color: '#94a3b8' }}>💰 TỔNG DOANH THU THỰC TẾ (SUCCESS)</h4>
-                        <h2 style={{ margin: '5px 0 0 0', color: '#10b981', fontSize: '36px' }}>{totalRevenue.toLocaleString('vi-VN')} VND</h2>
-                    </div>
-                    <h4>Lịch sử luồng giao dịch cổng Momo / VNPay / Stripe</h4>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead><tr style={{ background: '#f1f5f9', textAlign: 'left' }}><th style={{ padding: '10px' }}>Mã Giao Dịch</th><th style={{ padding: '10px' }}>Tài khoản</th><th style={{ padding: '10px' }}>Số tiền</th><th style={{ padding: '10px' }}>Trạng thái</th></tr></thead>
-                        <tbody>
-                            {txns.map(t => (
-                                <tr key={t.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                                    <td style={{ padding: '10px', fontFamily: 'monospace' }}>{t.gatewayTransactionId}</td>
-                                    <td style={{ padding: '10px' }}>{t.userEmail}</td>
-                                    <td style={{ padding: '10px', fontWeight: 'bold' }}>{t.amount.toLocaleString('vi-VN')} đ</td>
-                                    <td style={{ padding: '10px' }}>
-                                        <span style={{ color: t.status === 'Success' ? 'green' : t.status === 'Failed' ? 'red' : 'blue', fontWeight: 'bold' }}>
-                                            {t.status === 'Success' ? 'Thành công' : t.status === 'Failed' ? 'Thất bại' : 'Đã hoàn tiền'}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+            </div>
         </div>
     );
 }
