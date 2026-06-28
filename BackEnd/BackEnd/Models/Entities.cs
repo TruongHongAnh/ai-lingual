@@ -87,9 +87,21 @@ namespace BackEnd.Models
     [Table("USER_FLASHCARDS")]
     public class UserFlashcard { [Key] public Guid Id { get; set; } = Guid.NewGuid(); [Required] public Guid UserId { get; set; } [ForeignKey("UserId")] public User? User { get; set; } [Required, MaxLength(100)] public string TargetWord { get; set; } = string.Empty; [Required, MaxLength(255)] public string Translation { get; set; } = string.Empty; public double EaseFactor { get; set; } = 2.5; public int IntervalDays { get; set; } = 0; public DateTime NextReviewDate { get; set; } = DateTime.UtcNow; }
 
-    [Table("TRANSACTIONS")]
-    public class Transaction { [Key] public Guid Id { get; set; } = Guid.NewGuid(); [Required] public Guid UserId { get; set; } [ForeignKey("UserId")] public User? User { get; set; } [Required, MaxLength(100)] public string GatewayTransactionId { get; set; } = string.Empty; public decimal Amount { get; set; } [Required, MaxLength(50)] public string Status { get; set; } = "Pending"; public DateTime CreatedAt { get; set; } = DateTime.UtcNow; }
+    public class Transaction
+    {
+        public Guid Id { get; set; }
+        public Guid UserId { get; set; }
+        public string GatewayTransactionId { get; set; }
+        public decimal Amount { get; set; }
+        public string Status { get; set; }
 
+        // 👉 THÊM ĐÚNG DÒNG NÀY VÀO (Dùng dấu ? để cho phép Null)
+        public string? Note { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+
+        public User User { get; set; }
+    }
     [Table("SUPPORT_TICKETS")]
     public class SupportTicket { [Key] public Guid Id { get; set; } = Guid.NewGuid(); [Required] public Guid SenderId { get; set; } [ForeignKey("SenderId")] public User? Sender { get; set; } public Guid? ResolverId { get; set; } [ForeignKey("ResolverId")] public User? Resolver { get; set; } [Required, MaxLength(100)] public string IssueCategory { get; set; } = string.Empty; [Required] public string Content { get; set; } = string.Empty; public string? AdminReply { get; set; } [Required, MaxLength(50)] public string Status { get; set; } = "Pending"; public DateTime CreatedAt { get; set; } = DateTime.UtcNow; public DateTime? ResolvedAt { get; set; } }
 

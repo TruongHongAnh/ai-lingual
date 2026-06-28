@@ -203,8 +203,112 @@ namespace BackEnd.Controllers.ContentManager
 
             return Ok(new { message = "Đã xóa từ vựng khỏi bài học!" });
         }
-    }
+        // API HỦY KHÓA BÀI HỌC (Nhả khóa nếu CM đổi ý không sửa nữa)
+        [HttpPost("lessons/{lessonId}/unlock")]
+        public async Task<IActionResult> UnlockLesson(Guid lessonId)
+        {
+            var userId = GetUserId();
+            var lesson = await _context.Lessons.FindAsync(lessonId);
 
+            if (lesson == null) return NotFound(new { message = "Không tìm thấy bài học!" });
+
+            // Chỉ người đang giữ chìa khóa mới được phép nhả khóa
+            if (lesson.LockedById == userId)
+            {
+                lesson.LockedById = null;
+                lesson.LockedUntil = null;
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new { message = "Đã hủy phiên chỉnh sửa và nhả khóa an toàn!" });
+        }
+        // ==========================================
+        // API BỔ SUNG: THÊM CHƯƠNG (UNIT) & XÓA BÀI HỌC (LESSON)
+        // ==========================================
+
+        [HttpPost("units")]
+        public async Task<IActionResult> CreateUnit([FromBody] CreateUnitReq req)
+        {
+            var userId = GetUserId();
+            var currentUser = await _context.Users.FindAsync(userId);
+
+            // Nếu là Admin hoặc Trưởng phòng ('all'), cho phép tự chọn ngôn ngữ. Nếu là CM thường, lấy đúng ngôn ngữ họ quản lý.
+            string lang = currentUser!.ManagedLanguage == "all" ? (req.LanguageCode ?? "en") : currentUser.ManagedLanguage!;
+
+            var unit = new Unit
+            {
+                Id = Guid.NewGuid(),
+                Title = req.Title,
+                LanguageCode = lang,
+                ColorHex = req.ColorHex ?? "#7c3aed",
+                OrderIndex = await _context.Units.CountAsync() + 1
+            };
+
+            _context.Units.Add(unit);
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Thêm chương mới thành công!", unit });
+        }
+
+        [HttpDelete("lessons/{lessonId}")]
+        public async Task<IActionResult> DeleteLesson(Guid lessonId)
+        {
+            var lesson = await _context.Lessons.FindAsync(lessonId);
+            if (lesson == null) return NotFound(new { message = "Không tìm thấy bài học!" });
+
+            // 1. Xóa toàn bộ từ vựng nằm trong bài học này trước (Tránh lỗi khóa ngoại Foreign Key)
+            var lessonVocabs = _context.LessonVocabularies.Where(lv => lv.LessonId == lessonId);
+            _context.LessonVocabularies.RemoveRange(lessonVocabs);
+
+            // 2. Tiến hành xóa bài học
+            _context.Lessons.Remove(lesson);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Đã xóa bài học thành công!" });
+        }
+        // ==========================================
+        // API: GỬI DUYỆT LẠI BÀI HỌC
+        // ==========================================
+        [HttpPost("lessons/{lessonId}/submit-for-review")]
+        public async Task<IActionResult> SubmitForReview(Guid lessonId)
+        {
+            var userId = GetUserId();
+            var lesson = await _context.Lessons.FindAsync(lessonId);
+
+            if (lesson == null) return NotFound(new { message = "Không tìm thấy bài học!" });
+
+            // Kiểm tra xem bài học có đang bị Biên tập viên khác khóa không
+            if (lesson.LockedById != null && lesson.LockedById != userId && lesson.LockedUntil > DateTime.UtcNow)
+                return BadRequest(new { message = "Bài học đang bị Biên tập viên khác khóa, không thể gửi duyệt!" });
+
+            // Chuyển trạng thái về Chờ duyệt và Tự động nhả khóa để an toàn
+            lesson.ApprovalStatus = "Pending";
+            lesson.LockedById = null;
+            lesson.LockedUntil = null;
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Đã gửi lại bài học cho Admin xét duyệt!" });
+        }
+        // ==========================================
+        // API BỔ SUNG: THỐNG KÊ CHẤT LƯỢNG NỘI DUNG (DÀNH CHO TRANG BÁO CÁO)
+        // ==========================================
+        [HttpGet("content-quality")]
+        public async Task<IActionResult> GetContentQuality()
+        {
+            var approved = await _context.Lessons.CountAsync(l => l.ApprovalStatus == "Approved");
+            var rejected = await _context.Lessons.CountAsync(l => l.ApprovalStatus == "Rejected");
+            var pending = await _context.Lessons.CountAsync(l => l.ApprovalStatus == "Pending");
+            var total = approved + rejected + pending;
+
+            return Ok(new
+            {
+                Total = total,
+                Approved = approved,
+                Rejected = rejected,
+                Pending = pending
+            });
+        }
+    }
+    public class CreateUnitReq { public string Title { get; set; } = ""; public string? LanguageCode { get; set; } public string? ColorHex { get; set; } }
     public class CreateLessonReq { public Guid UnitId { get; set; } public string Title { get; set; } = ""; public string LessonType { get; set; } = "Vocab"; }
     public class VocabReq { public string Word { get; set; } = ""; public string Meaning { get; set; } = ""; public string? Pronunciation { get; set; } public string? ExampleSentence { get; set; } public string? ExampleTranslation { get; set; } public string? LanguageCode { get; set; } }
 }
